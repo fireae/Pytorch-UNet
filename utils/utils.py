@@ -16,19 +16,17 @@ def split_img_into_squares(img):
 def hwc_to_chw(img):
     return np.transpose(img, axes=[2, 0, 1])
 
-def resize_and_crop(pilimg, scale=0.5, final_height=None):
+def resize_and_crop(pilimg, max_len = 736):
     w = pilimg.size[0]
     h = pilimg.size[1]
+    max_w = max(w,h)
+    scale = max_len / max_w
+
     newW = int(w * scale)
     newH = int(h * scale)
 
-    if not final_height:
-        diff = 0
-    else:
-        diff = newH - final_height
-
     img = pilimg.resize((newW, newH))
-    img = img.crop((0, diff // 2, newW, newH - diff // 2))
+    # img = img.crop((0, diff // 2, newW, newH - diff // 2))
     return np.array(img, dtype=np.float32)
 
 def batch(iterable, batch_size):
@@ -52,7 +50,7 @@ def split_train_val(dataset, val_percent=0.05):
 
 
 def normalize(x):
-    return x / 255
+    return x / 255.0
 
 def merge_masks(img1, img2, full_w):
     h = img1.shape[0]

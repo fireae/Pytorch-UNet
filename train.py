@@ -10,7 +10,8 @@ from torch import optim
 
 from eval import eval_net
 from unet import UNet
-from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch
+from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, get_batch_images_masks
+from data_util import get_multi_generator
 
 def train_net(net,
               epochs=5,
@@ -21,14 +22,14 @@ def train_net(net,
               gpu=False,
               img_scale=0.5):
 
-    dir_img = 'data/train/'
-    dir_mask = 'data/train_masks/'
+    dir_img = 'data/images/'
+    dir_mask = 'data/masks/'
     dir_checkpoint = 'checkpoints/'
 
-    ids = get_ids(dir_img)
-    ids = split_ids(ids)
+    # ids = get_ids(dir_img)
+    # ids = split_ids(ids)
 
-    iddataset = split_train_val(ids, val_percent)
+    # iddataset = split_train_val(ids, val_percent)
 
     print('''
     Starting training:
@@ -39,10 +40,10 @@ def train_net(net,
         Validation size: {}
         Checkpoints: {}
         CUDA: {}
-    '''.format(epochs, batch_size, lr, len(iddataset['train']),
-               len(iddataset['val']), str(save_cp), str(gpu)))
+    '''.format(epochs, batch_size, lr, 10000,
+               0, str(save_cp), str(gpu)))
 
-    N_train = len(iddataset['train'])
+    N_train = 100000
 
     optimizer = optim.SGD(net.parameters(),
                           lr=lr,
@@ -50,6 +51,7 @@ def train_net(net,
                           weight_decay=0.0005)
 
     criterion = nn.BCELoss()
+    data_iter = get_multi_generator(num_workers=10, generator=get_batch_images_masks, dir_image=dir_img, dir_mask=dir_mask, max_len=512, batch_size=4)
 
     for epoch in range(epochs):
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
@@ -61,11 +63,16 @@ def train_net(net,
 
         epoch_loss = 0
 
-        for i, b in enumerate(batch(train, batch_size)):
-            imgs = np.array([i[0] for i in b]).astype(np.float32)
-            true_masks = np.array([i[1] for i in b])
+        # for i, b in enumerate(batch(train, batch_size)):
+        #     imgs = np.array([i[0] for i in b]).astype(np.float32)
+        #     true_masks = np.array([i[1] for i in b])
+        for i in range(10):
+            out = next(data_iter)
+            imgs = out[0]
+            true_masks = out[1]
 
             imgs = torch.from_numpy(imgs)
+            print(imgs.size())
             true_masks = torch.from_numpy(true_masks)
 
             if gpu:
@@ -88,7 +95,7 @@ def train_net(net,
 
         print('Epoch finished ! Loss: {}'.format(epoch_loss / i))
 
-        if 1:
+        if 0:
             val_dice = eval_net(net, val, gpu)
             print('Validation Dice Coeff: {}'.format(val_dice))
 
@@ -121,7 +128,7 @@ if __name__ == '__main__':
     args = get_args()
 
     net = UNet(n_channels=3, n_classes=1)
-
+    print(net)
     if args.load:
         net.load_state_dict(torch.load(args.load))
         print('Model loaded from {}'.format(args.load))
