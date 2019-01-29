@@ -27,23 +27,24 @@ def to_cropped_imgs(ids, dir, suffix, scale):
         im = resize_and_crop(Image.open(dir + id + suffix), scale=scale)
         yield get_square(im, pos)
 
+
 def get_imgs_and_masks(ids, dir_img, dir_mask, scale):
     """Return all the couples (img, mask)"""
 
-    imgs = to_cropped_imgs(ids, dir_img, '.jpg', scale)
+    imgs = to_cropped_imgs(ids, dir_img, ".jpg", scale)
 
     # need to transform from HWC to CHW
     imgs_switched = map(hwc_to_chw, imgs)
     imgs_normalized = map(normalize, imgs_switched)
 
-    masks = to_cropped_imgs(ids, dir_mask, '_mask.jpg', scale)
+    masks = to_cropped_imgs(ids, dir_mask, "_mask.jpg", scale)
 
     return zip(imgs_normalized, masks)
 
 
 def get_full_img_and_mask(id, dir_img, dir_mask):
-    im = Image.open(dir_img + id + '.jpg')
-    mask = Image.open(dir_mask + id + '_mask.gif')
+    im = Image.open(dir_img + id + ".jpg")
+    mask = Image.open(dir_mask + id + "_mask.gif")
     return np.array(im), np.array(mask)
 
 
@@ -52,49 +53,47 @@ def get_batch_images_masks(dir_image, dir_mask, max_len=512, batch_size=4):
     name_bases = []
     for image_name in image_names:
         name, ext = os.path.splitext(image_name)
-        if ext in ['.jpg']:
-            name_bases.append(image_name)
-    
+        if ext in [".jpg"]:
+            name_bases.append(name)
+
     batch_images = np.zeros((batch_size, 3, max_len, max_len), dtype=np.float32)
     batch_masks = np.zeros((batch_size, 1, max_len, max_len), dtype=np.float32)
-    image_idx = 0
+    image_index = np.arange(0, len(name_bases))
     while True:
-        if image_idx >= len(name_bases):
-            random.shuffle(name_bases)
-            image_idx = 0
-
-        batch_id_list = [i for i in range(batch_size)]
-        if image_idx + batch_size >= len(name_bases):
-            batch_id_list  = [i for i in range(len(name_bases)-image_idx-1, len(name_bases) - image_idx-1+batch_size)]
-        print(batch_id_list)
-        for i in batch_id_list:
-            print(image_idx+i)
-            if (image_idx+i) >= len(name_bases):
-                random.shuffle(name_bases)
-                image_idx = 0
-            image_name = os.path.join(dir_image, name_bases[image_idx+i])
-            mask_name= os.path.join(dir_mask, name_bases[image_idx+i])
+        np.random.shuffle(image_index)
+        batch_images = []
+        batch_masks = []
+        for i in image_index:
+            image_name = os.path.join(dir_image, name_bases[i] + ".jpg")
+            mask_name = os.path.join(dir_mask, name_bases[i] + "_mask.jpg")
             image = Image.open(image_name)
             mask = Image.open(mask_name)
             image = resize_and_crop(image, max_len)
             h, w = image.shape[0], image.shape[1]
             # need to transform from HWC to CHW
             imgs_switched = np.transpose(image, axes=(2, 0, 1))
-   
-            imgs_normalized = imgs_switched / 255.0
-          
-            mask = resize_and_crop(mask, max_len)
-          
-            print(image_name)
-            batch_images[i,:, :h, :w] = np.array(imgs_normalized).astype(np.float32)
-            batch_masks[i, :, :h, :w] = np.array(mask).astype(np.float32)
-        
-        image_idx = image_idx+batch_size
-        yield batch_images, batch_masks
-        batch_images = np.zeros((batch_size, 3, 736, 736), dtype=np.float32)
-        batch_masks = np.zeros((batch_size, 1, 736, 736), dtype=np.float32)
-        if image_idx >= len(name_bases):
-            random.shuffle(name_bases)
-            image_idx = 0
 
+            imgs_normalized = imgs_switched / 255.0
+
+            mask = resize_and_crop(mask, max_len)
+            mask = mask / 255.0
+            batch_images.append(imgs_normalized)
+            batch_masks.append(mask)
+
+            if len(batch_images) == batch_size:
+                print(len(batch_images))
+                print(len(batch_masks))
+                np_batch_images = np.ones(
+                    (len(batch_images), 3, max_len, max_len), dtype=np.float32
+                )
+                np_batch_masks = np.zeros(
+                    (len(batch_images), 1, max_len, max_len), dtype=np.float32
+                )
+                for i in range(len(batch_images)):
+                    h, w = batch_images[i].shape[1], batch_images[i].shape[2]
+                    np_batch_images[i, :, :h, :w] = batch_images[i]
+                    np_batch_masks[i, :, :h, :w] = batch_masks[i]
+                yield np_batch_images, np_batch_masks
+                batch_images = []
+                batch_masks = []
 
